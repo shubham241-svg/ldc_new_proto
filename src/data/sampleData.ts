@@ -1,0 +1,231 @@
+export interface ReviewItem {
+    id: string;
+    name: string;
+    date: string;
+    recordCount: number;
+    status: 'pending' | 'validated';
+}
+
+export interface SiloRecord {
+    id: string;
+    status: 'Matched' | 'To Review' | 'Not Matched';
+    recordId: string;
+    timestamp: string;
+    siloName: string;
+    product: string;
+    quantity: number;
+    unit: string;
+    vendor: string;
+    batchNo: string;
+    loadDate: string;
+    moisture: number;
+}
+
+export const reviewItems: ReviewItem[] = [
+    {
+        id: '1',
+        name: 'Warehouse PS VSB',
+        date: '7/02/2025',
+        recordCount: 3,
+        status: 'pending',
+    },
+    {
+        id: '2',
+        name: 'Pioneer Alison North',
+        date: '6/02/2025',
+        recordCount: 5,
+        status: 'pending',
+    },
+    {
+        id: '3',
+        name: 'Nutriteed Biromassa',
+        date: '7/02/2025',
+        recordCount: 4,
+        status: 'pending',
+    },
+    {
+        id: '4',
+        name: 'Central Silo B',
+        date: '5/02/2025',
+        recordCount: 8,
+        status: 'validated',
+    },
+    {
+        id: '5',
+        name: 'East Warehouse Complex',
+        date: '4/02/2025',
+        recordCount: 6,
+        status: 'validated',
+    },
+];
+
+export const siloRecords: SiloRecord[] = [
+    {
+        id: '1',
+        status: 'Matched',
+        recordId: 'REC-001',
+        timestamp: '2025-02-07 08:30:00',
+        siloName: 'Silo A',
+        product: 'Corn',
+        quantity: 15000,
+        unit: 'MT',
+        vendor: 'AgriCorp',
+        batchNo: 'BCH-2025-001',
+        loadDate: '2025-02-07',
+        moisture: 14.5,
+    },
+    {
+        id: '2',
+        status: 'To Review',
+        recordId: 'REC-002',
+        timestamp: '2025-02-07 09:15:00',
+        siloName: 'Silo B',
+        product: 'Wheat',
+        quantity: 12500,
+        unit: 'MT',
+        vendor: 'GrainTech',
+        batchNo: 'BCH-2025-002',
+        loadDate: '2025-02-07',
+        moisture: 15.2,
+    },
+    {
+        id: '3',
+        status: 'Not Matched',
+        recordId: 'REC-003',
+        timestamp: '2025-02-07 10:45:00',
+        siloName: 'Silo C',
+        product: 'Soybeans',
+        quantity: 8000,
+        unit: 'MT',
+        vendor: 'BioHarvest',
+        batchNo: 'BCH-2025-003',
+        loadDate: '2025-02-07',
+        moisture: 16.8,
+    },
+    {
+        id: '4',
+        status: 'Matched',
+        recordId: 'REC-004',
+        timestamp: '2025-02-07 11:20:00',
+        siloName: 'Silo D',
+        product: 'Barley',
+        quantity: 10000,
+        unit: 'MT',
+        vendor: 'HarvestPro',
+        batchNo: 'BCH-2025-004',
+        loadDate: '2025-02-07',
+        moisture: 14,
+    },
+    {
+        id: '5',
+        status: 'Matched',
+        recordId: 'REC-005',
+        timestamp: '2025-02-07 13:00:00',
+        siloName: 'Silo A',
+        product: 'Corn',
+        quantity: 18000,
+        unit: 'MT',
+        vendor: 'AgriCorp',
+        batchNo: 'BCH-2025-005',
+        loadDate: '2025-02-07',
+        moisture: 13.9,
+    },
+    {
+        id: '6',
+        status: 'To Review',
+        recordId: 'REC-006',
+        timestamp: '2025-02-07 14:30:00',
+        siloName: 'Silo E',
+        product: 'Rice',
+        quantity: 9500,
+        unit: 'MT',
+        vendor: 'PaddyFields',
+        batchNo: 'BCH-2025-006',
+        loadDate: '2025-02-07',
+        moisture: 12.1,
+    },
+    {
+        id: '7',
+        status: 'Matched',
+        recordId: 'REC-007',
+        timestamp: '2025-02-07 15:45:00',
+        siloName: 'Silo B',
+        product: 'Wheat',
+        quantity: 11000,
+        unit: 'MT',
+        vendor: 'GrainTech',
+        batchNo: 'BCH-2025-007',
+        loadDate: '2025-02-07',
+        moisture: 14.8,
+    },
+    {
+        id: '8',
+        status: 'Not Matched',
+        recordId: 'REC-008',
+        timestamp: '2025-02-07 16:20:00',
+        siloName: 'Silo F',
+        product: 'Sorghum',
+        quantity: 7500,
+        unit: 'MT',
+        vendor: 'SeedLink',
+        batchNo: 'BCH-2025-008',
+        loadDate: '2025-02-07',
+        moisture: 17.3,
+    },
+    {
+        id: '9',
+        status: 'Matched',
+        recordId: 'REC-009',
+        timestamp: '2025-02-08 08:00:00',
+        siloName: 'Silo A',
+        product: 'Corn',
+        quantity: 20000,
+        unit: 'MT',
+        vendor: 'AgriCorp',
+        batchNo: 'BCH-2025-009',
+        loadDate: '2025-02-08',
+        moisture: 14.2,
+    },
+    {
+        id: '10',
+        status: 'To Review',
+        recordId: 'REC-010',
+        timestamp: '2025-02-08 09:30:00',
+        siloName: 'Silo C',
+        product: 'Soybeans',
+        quantity: 13000,
+        unit: 'MT',
+        vendor: 'BioHarvest',
+        batchNo: 'BCH-2025-010',
+        loadDate: '2025-02-08',
+        moisture: 15.6,
+    },
+    {
+        id: '11',
+        status: 'Matched',
+        recordId: 'REC-011',
+        timestamp: '2025-02-08 10:15:00',
+        siloName: 'Silo D',
+        product: 'Barley',
+        quantity: 9000,
+        unit: 'MT',
+        vendor: 'HarvestPro',
+        batchNo: 'BCH-2025-011',
+        loadDate: '2025-02-08',
+        moisture: 13.5,
+    },
+    {
+        id: '12',
+        status: 'Matched',
+        recordId: 'REC-012',
+        timestamp: '2025-02-08 11:45:00',
+        siloName: 'Silo E',
+        product: 'Rice',
+        quantity: 16000,
+        unit: 'MT',
+        vendor: 'PaddyFields',
+        batchNo: 'BCH-2025-012',
+        loadDate: '2025-02-08',
+        moisture: 11.8,
+    },
+];
