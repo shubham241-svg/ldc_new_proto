@@ -112,6 +112,88 @@ function useInfiniteScroll({
     return { sentinelRef };
 }
 
+// --- Sub-components for Cells to fix Hooks Violated ---
+
+function StatusCell({ value }: { value: unknown }) {
+    const norm = normalizeStatus(value);
+    const options = ['Validated', 'Not Validated'];
+    const [statusVal, setStatusVal] = useState(options[0]);
+
+    if (norm !== 'Matched') {
+        return <StatusBadge value={value} />;
+    }
+
+    return (
+        <select
+            value={statusVal}
+            onChange={(e) => setStatusVal(e.target.value)}
+            className="px-2 py-1 rounded text-sm bg-green-50 border border-green-200 focus:outline-none focus:ring-1 focus:ring-green-500"
+        >
+            {options.map((o) => (
+                <option key={o} value={o}>
+                    {o}
+                </option>
+            ))}
+        </select>
+    );
+}
+
+function LdcIdCell({
+    value,
+    rowId,
+    onSave
+}: {
+    value: unknown;
+    rowId: string;
+    onSave: (val: string) => void
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingValue, setEditingValue] = useState(String(value ?? ''));
+
+    if (isEditing) {
+        return (
+            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                <Input
+                    value={editingValue}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    className="h-8 w-32"
+                    autoFocus
+                />
+                <Button
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => {
+                        onSave(editingValue);
+                        setIsEditing(false);
+                    }}
+                >
+                    ✔
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2"
+                    onClick={() => setIsEditing(false)}
+                >
+                    ✕
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            onClick={() => {
+                setEditingValue(String(value ?? ''));
+                setIsEditing(true);
+            }}
+            className="cursor-pointer hover:bg-black/5 px-2 py-1 rounded transition-colors min-h-[2rem] flex items-center"
+        >
+            {String(value ?? '')}
+        </div>
+    );
+}
+
 // --- Main Component ---
 
 /**
@@ -123,18 +205,14 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
     // Guard
     const safeRecords = Array.isArray(records) ? records : [];
     const first = safeRecords[0] ?? {};
-    const dynamicKeys = useMemo(() => Object.keys(first), [first]);
 
     // Table state
+    const [tableData, setTableData] = useState<AnyRecord[]>(() =>
+        safeRecords.map(r => ({ ...r, validated: false }))
+    );
     const [sorting, setSorting] = useState<SortingState>([]);
     const [globalFilter, setGlobalFilter] = useState('');
     const [rowSelection, setRowSelection] = useState({});
-
-    //editable ldc id 
-    // 🔵 Add this
-    const [tableData, setTableData] = useState(records);
-    const [editingRowId, setEditingRowId] = useState<string | null>(null);
-    const [editingValue, setEditingValue] = useState('');
 
     // Infinite scroll (client-slice)
     const INITIAL = 20;
@@ -146,91 +224,98 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         setVisibleCount(INITIAL);
     }, [globalFilter, sorting]);
 
+    const handleLdcIdUpdate = async (rowId: string, newValue: string, rowData: AnyRecord) => {
+        // Optimistic update
+        setTableData((prev) =>
+            prev.map((r) => (String(r['id']) === String(rowId) ? { ...r, ldc_id: newValue } : r))
+        );
+
+        // Trigger API update
+        await handleUpdate(rowId, { ldc_id: newValue }, rowData.batch_id as string);
+    };
+
+    const handleToggleValidated = async (rowId: string, rowData: AnyRecord) => {
+        const newValidated = !rowData['validated'];
+
+        // Optimistic update
+        setTableData((prev) =>
+            prev.map((r) => (String(r['id']) === String(rowId) ? { ...r, validated: newValidated } : r))
+        );
+
+        // Trigger API update
+        await handleUpdate(rowId, { validated: newValidated }, rowData.batch_id as string);
+    };
+
     // Build dynamic columns
-const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
-    .filter((key) => key !== 'id' && key !== 'batch_id') // hide id & batch_id
-    .sort((a, b) => (a === 'status' ? -1 : b === 'status' ? 1 : 0)) // status first
-    .map((key) => ({
-        accessorKey: key,
-        header: key
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, (c) => c.toUpperCase()),
-        size: 160,
-        cell: ({ getValue, row }) => {
-            const val = getValue();
+    const dynamicKeys = useMemo(() => {
+        if (!tableData.length) return [];
+        // Extract all keys from the first record, but filter out hidden ones
+        const keys = Object.keys(tableData[0]);
+        return keys
+            .filter((key) => key !== 'id' && key !== 'batch_id' && key !== 'validated')
+            .sort((a, b) => {
+                if (a === 'status') return -1;
+                if (b === 'status') return 1;
+                return 0;
+            });
+    }, [tableData]);
 
-            if (key.toLowerCase() === 'status') {
-                const norm = normalizeStatus(val);
+    const columns: ColumnDef<AnyRecord>[] = useMemo(() => {
+        const baseColumns: ColumnDef<AnyRecord>[] = [
+            {
+                id: 'validated',
+                header: () => <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Val</span>,
+                cell: ({ row }) => {
+                    const status = normalizeStatus(row.original.status);
+                    if (status !== 'Matched') return null;
 
-                // Only allow dropdown if status === 'Matched'
-                const options = ['Validated', 'Not Validated'];
-                const [statusVal, setStatusVal] = useState(options[0]);
-
-                return (
-                    <select
-                        value={statusVal}
-                        disabled={norm !== 'Matched'}
-                        onChange={(e) => setStatusVal(e.target.value)}
-                        className={`px-2 py-1 rounded text-sm ${
-                            norm === 'Matched' ? 'bg-green-50' : 'bg-gray-100 cursor-not-allowed'
-                        }`}
-                    >
-                        {options.map((o) => (
-                            <option key={o} value={o}>
-                                {o}
-                            </option>
-                        ))}
-                    </select>
-                );
-            }
-
-            if (key.toLowerCase() === 'ldc_id') {
-                const rowId = row.id;
-                if (editingRowId === rowId) {
                     return (
-                        <div className="flex gap-1">
-                            <Input
-                                value={editingValue}
-                                onChange={(e) => setEditingValue(e.target.value)}
-                                size="sm"
-                            />
-                            <Button
-                                size="icon"
-                                onClick={() => {
-                                    setTableData((prev) =>
-                                        prev.map((r) =>
-                                            r.id === rowId ? { ...r, ldc_id: editingValue } : r
-                                        )
-                                    );
-                                    setEditingRowId(null);
-                                }}
-                            >
-                                ✔
-                            </Button>
-                        </div>
+                        <input
+                            type="checkbox"
+                            checked={!!row.original.validated}
+                            onChange={() => handleToggleValidated(row.id as string, row.original as AnyRecord)}
+                            className="rounded border-gray-300 accent-primary cursor-pointer w-4 h-4"
+                        />
+                    );
+                },
+                size: 50,
+                enableSorting: false,
+            },
+        ];
+
+        const dynCols: ColumnDef<AnyRecord>[] = dynamicKeys.map((key) => ({
+            accessorKey: key,
+            header: key
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, (c) => c.toUpperCase()),
+            size: 160,
+            cell: ({ getValue, row }) => {
+                const val = getValue();
+
+                if (key.toLowerCase() === 'status') {
+                    return <StatusBadge value={val} />;
+                }
+
+                if (key.toLowerCase() === 'ldc_id') {
+                    return (
+                        <LdcIdCell
+                            value={val}
+                            rowId={row.id}
+                            onSave={(newVal) => handleLdcIdUpdate(row.id, newVal, row.original as AnyRecord)}
+                        />
                     );
                 }
-                return (
-                    <div
-                        onClick={() => {
-                            setEditingRowId(rowId);
-                            setEditingValue(String(val ?? ''));
-                        }}
-                        className="cursor-pointer"
-                    >
-                        {String(val ?? '')}
-                    </div>
-                );
-            }
 
-            return <span>{String(val ?? '')}</span>;
-        },
-    }));
+                return <span>{formatValue(val)}</span>;
+            },
+        }));
+
+        return [...baseColumns, ...dynCols];
+    }, [dynamicKeys]);
 
     const table = useReactTable({
-        // data: safeRecords,
-        data: tableData, // 🔵 Use this for editable data
-        dynamicColumns,
+        data: tableData,
+        columns,
         state: { sorting, globalFilter, rowSelection },
         onSortingChange: setSorting,
         onGlobalFilterChange: setGlobalFilter,
@@ -238,6 +323,7 @@ const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        getRowId: (row) => String(row.id),
     });
 
     const filteredRows = table.getFilteredRowModel().rows;
@@ -245,17 +331,18 @@ const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
     const onLoadMore = () => setVisibleCount((c) => Math.min(c + STEP, filteredRows.length));
 
     const scrollRootRef = useRef<HTMLDivElement>(null);
-    const { sentinelRef } = useInfiniteScroll({ hasMore, onLoadMore, rootRef: scrollRootRef });
+    const { sentinelRef } = useInfiniteScroll({ hasMore, onLoadMore, rootRef: scrollRootRef as React.RefObject<HTMLDivElement> });
 
     const rowsToRender = filteredRows.slice(0, visibleCount);
 
     // patch call to update table data on edit
 
-    const handleUpdate = async (rowData: AnyRecord) => {
+    const handleUpdate = async (
+        matchId: string,
+        updates: { ldc_id?: string; validated?: boolean },
+        batchId: string
+    ) => {
         try {
-            const matchId = rowData.id;        // 👈 URL param
-            const batchId = rowData.batch_id;  // 👈 comes from row
-
             const response = await fetch(
                 `http://127.0.0.1:8020/api/dxo/pa/ldc/v1/customer-ldc-match/${matchId}`,
                 {
@@ -265,7 +352,7 @@ const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        ldc_id: editingValue,
+                        ...updates,
                         batch_id: batchId,
                     }),
                 }
@@ -280,11 +367,9 @@ const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
             // 🔄 Replace updated row in table
             setTableData((prev) =>
                 prev.map((r) =>
-                    r.id === updatedRow.id ? updatedRow : r
+                    String(r['id']) === String(updatedRow.id) ? (updatedRow as AnyRecord) : r
                 )
             );
-
-            setEditingRowId(null);
         } catch (error) {
             console.error('Update failed:', error);
         }
@@ -342,11 +427,11 @@ const dynamicColumns: ColumnDef<AnyRecord>[] = dynamicKeys
                         <table className="w-full text-sm">
                             <thead>
                                 {table.getHeaderGroups().map((headerGroup) => (
-                                    <tr key={headerGroup.id} className="bg-primary">
+                                    <tr key={headerGroup.id} className="bg-primary shadow-sm border-b border-white/10">
                                         {headerGroup.headers.map((header) => (
                                             <th
                                                 key={header.id}
-                                                className="px-3 py-3 text-left text-xs font-semibold text-primary-foreground whitespace-nowrap"
+                                                className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-tight whitespace-nowrap"
                                                 style={{ width: header.getSize() }}
                                             >
                                                 {header.isPlaceholder ? null : (
