@@ -3,7 +3,9 @@ import { useIsAuthenticated } from '@azure/msal-react';
 import { ProtectedRoute } from './ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
 import { HomePage } from '@/pages/HomePage';
-import { TablePage } from '@/pages/TablePage';
+// import { TablePage } from '@/pages/TablePage';
+import { DynamicTablePage } from '@/pages/NewTable';
+import { sampleapiresponse } from '@/data/sampleData';
 
 export function AppRouter() {
     const isAuthenticated = useIsAuthenticated();
@@ -29,7 +31,8 @@ export function AppRouter() {
                     path="/table"
                     element={
                         <ProtectedRoute>
-                            <TablePage />
+                            {/* <TablePage /> */}
+                            <DynamicTablePage records={sampleapiresponse.data} />
                         </ProtectedRoute>
                     }
                 />
