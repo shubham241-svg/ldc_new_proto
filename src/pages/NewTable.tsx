@@ -24,7 +24,7 @@ import {
     Download,
     Search,
 } from 'lucide-react';
-
+import { getAccessToken } from '@/auth/getAccessToken';
 type AnyRecord = Record<string, unknown>;
 
 // --- Helpers ---
@@ -44,11 +44,13 @@ const formatValue = (v: unknown): string => {
     return String(v);
 };
 
-const normalizeStatus = (raw: unknown): 'Matched' | 'To Review' | 'Not Matched' | null => {
+type NormalizedStatus = 'Matched' | 'Not Matched' | 'To Review' | 'Not Validate';
+
+const normalizeStatus = (raw: unknown): NormalizedStatus | null => {
     if (raw == null) return null;
     const s = String(raw).trim().toUpperCase();
     if (s === 'MATCHED') return 'Matched';
-    if (s === 'NO MATCH') return 'Not Matched';
+    if (s === 'NO MATCH' || s === 'NOT MATCHED') return 'Not Matched';    if (s === 'NOT VALIDATE' || s === 'NOT VALIDATED') return 'Not Validate';
     if (['TO REVIEW', 'REVIEW', 'PENDING'].includes(s)) return 'To Review';
     return null;
 };
@@ -65,18 +67,21 @@ function StatusBadge({ value }: { value: unknown }) {
 }
 
 const getRowBg = (row: AnyRecord) => {
-    const norm = normalizeStatus(row?.status);
-    switch (norm) {
-        case 'Matched':
-            return 'bg-status-matched/10 hover:bg-status-matched/20';
-        case 'To Review':
-            return 'bg-status-review/10 hover:bg-status-review/20';
-        case 'Not Matched':
-            return 'bg-status-not-matched/10 hover:bg-status-not-matched/20';
-        default:
-            return '';
-    }
+  const norm = normalizeStatus(row?.status);
+  switch (norm) {
+    case 'Matched':
+      return 'bg-status-matched/10 hover:bg-status-matched/20';
+    case 'To Review':
+      return 'bg-status-review/10 hover:bg-status-review/20';
+    case 'Not Matched':
+      return 'bg-status-not-matched/10 hover:bg-status-not-matched/20';
+    case 'Not Validate':
+      return 'bg-gray-100 hover:bg-gray-200';
+    default:
+      return '';
+  }
 };
+
 
 // --- Infinite Scroll Hook ---
 
@@ -113,21 +118,35 @@ function useInfiniteScroll({
 }
 
 // --- Sub-components for Cells to fix Hooks Violated ---
+function StatusSelect({
+    value,
+    onChange,
+}: {
+    value: unknown;
+    onChange: (next: NormalizedStatus) => void;
+}) {
+    const current = normalizeStatus(value) ?? 'To Review';
 
-function StatusCell({ value }: { value: unknown }) {
-    const norm = normalizeStatus(value);
-    const options = ['Validated', 'Not Validated'];
-    const [statusVal, setStatusVal] = useState(options[0]);
+    const options: NormalizedStatus[] = [
+        'Matched',
+        'Not Matched',
+        'To Review',
+        'Not Validate',
+    ];
 
-    if (norm !== 'Matched') {
-        return <StatusBadge value={value} />;
-    }
+    // Tailwind color classes for each status
+    const colorMap: Record<NormalizedStatus, string> = {
+        'Matched': 'bg-green-100 text-green-900 border-green-300',
+        'Not Matched': 'bg-red-100 text-red-900 border-red-300',
+        'To Review': 'bg-yellow-100 text-yellow-900 border-yellow-300',
+        'Not Validate': 'bg-gray-100 text-gray-900 border-gray-300',
+    };
 
     return (
         <select
-            value={statusVal}
-            onChange={(e) => setStatusVal(e.target.value)}
-            className="px-2 py-1 rounded text-sm bg-green-50 border border-green-200 focus:outline-none focus:ring-1 focus:ring-green-500"
+            value={current}
+            onChange={(e) => onChange(e.target.value as NormalizedStatus)}
+            className={`px-2 py-1 rounded text-sm border focus:outline-none focus:ring-1 transition-colors ${colorMap[current]}`}
         >
             {options.map((o) => (
                 <option key={o} value={o}>
@@ -204,7 +223,6 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
 
     // Guard
     const safeRecords = Array.isArray(records) ? records : [];
-    const first = safeRecords[0] ?? {};
 
     // Table state
     const [tableData, setTableData] = useState<AnyRecord[]>(() =>
@@ -246,6 +264,24 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         await handleUpdate(rowId, { validated: newValidated }, rowData.batch_id as string);
     };
 
+
+    // Add this below handleToggleValidated
+    const handleStatusChange = async (
+        rowId: string,
+        nextStatus: NormalizedStatus,
+        rowData: AnyRecord
+    ) => {
+        // Optimistic update
+        setTableData((prev) =>
+            prev.map((r) =>
+                String(r['id']) === String(rowId) ? { ...r, status: nextStatus } : r
+            )
+        );
+
+        // Persist to backend (if API expects other casing/keys, map here)
+        await handleUpdate(rowId, { status: nextStatus } as any, rowData.batch_id as string);
+    };
+
     // Build dynamic columns
     const dynamicKeys = useMemo(() => {
         if (!tableData.length) return [];
@@ -263,24 +299,36 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
     const columns: ColumnDef<AnyRecord>[] = useMemo(() => {
         const baseColumns: ColumnDef<AnyRecord>[] = [
             {
-                id: 'validated',
-                header: () => <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Val</span>,
-                cell: ({ row }) => {
-                    const status = normalizeStatus(row.original.status);
-                    if (status !== 'Matched') return null;
+  id: 'validated',
+  header: () => (
+    <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+      Val
+    </span>
+  ),
+  cell: ({ row }) => {
+    const status = normalizeStatus(row.original.status);
+    const disabled = status !== 'Matched';
 
-                    return (
-                        <input
-                            type="checkbox"
-                            checked={!!row.original.validated}
-                            onChange={() => handleToggleValidated(row.id as string, row.original as AnyRecord)}
-                            className="rounded border-gray-300 accent-primary cursor-pointer w-4 h-4"
-                        />
-                    );
-                },
-                size: 50,
-                enableSorting: false,
-            },
+    return (
+      <input
+        type="checkbox"
+        checked={!!row.original.validated}
+        disabled={disabled}
+        onChange={() => {
+          if (!disabled) {
+            handleToggleValidated(row.id as string, row.original as AnyRecord);
+          }
+        }}
+        className={`rounded border-gray-300 w-4 h-4 ${
+          disabled ? 'opacity-40 cursor-not-allowed' : 'accent-primary cursor-pointer'
+        }`}
+        title={disabled ? 'Validation allowed only for Matched' : 'Mark as validated'}
+      />
+    );
+  },
+  size: 50,
+  enableSorting: false,
+}
         ];
 
         const dynCols: ColumnDef<AnyRecord>[] = dynamicKeys.map((key) => ({
@@ -293,7 +341,12 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
                 const val = getValue();
 
                 if (key.toLowerCase() === 'status') {
-                    return <StatusBadge value={val} />;
+                    return (
+                        <StatusSelect
+                            value={val}
+                            onChange={(next) => handleStatusChange(row.id, next, row.original as AnyRecord)}
+                        />
+                    );
                 }
 
                 if (key.toLowerCase() === 'ldc_id') {
@@ -339,7 +392,7 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
 
     const handleUpdate = async (
         matchId: string,
-        updates: { ldc_id?: string; validated?: boolean },
+        updates: { ldc_id?: string; validated?: boolean; status?: NormalizedStatus | string },
         batchId: string
     ) => {
         try {
@@ -511,4 +564,4 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         </div>
     );
 }
-``
+
