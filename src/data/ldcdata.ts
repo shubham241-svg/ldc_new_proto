@@ -7,6 +7,11 @@
 //   "batch_id": "5de8c41e-40df-4547-9936-4bb534b7236c"
 // }
 
+
+// Show all the records in Greyed out mode whose status is either "INVALID" or whose generation_id is  not null.
+// Record rows will be colored accordingly as per status.
+// validation checkbox will be disabled for all the records except whose status is "MATCHED".
+
 export const ldcapidata = 
 
  {
