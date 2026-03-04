@@ -1,0 +1,50 @@
+{
+    "project_name": "LDC Work Prototype (POC)",
+    "version": "1.0.0",
+    "description": "A proof-of-concept application built with React, TypeScript, and Vite for managing and validating matching data between silos. It features robust authentication via Microsoft MSAL (Azure AD).",
+    "tech_stack": {
+        "frontend_core": "React 19, TypeScript, Vite",
+        "styling": "Tailwind CSS, shadcn/ui (Radix UI)",
+        "table_engine": "@tanstack/react-table (v8)",
+        "authentication": "@azure/msal-react / @azure/msal-browser",
+        "icons": "Lucide React",
+        "routing": "React Router DOM v7"
+    },
+    "architecture_overview": {
+        "auth_flow": "Users must authenticate via MSAL before accessing protected routes. Token-based session management is handled globally.",
+        "routing": "Protected routes ensure only authenticated users can access the Home and Table pages.",
+        "data_fetching": "Uses a combination of static sample data (for batches) and dynamic API interaction for row-level updates (PATCH calls to 127.0.0.1:8020)."
+    },
+    "pages": {
+        "LoginPage": {
+            "path": "/login",
+            "description": "Entry point for authentication using Microsoft identity platform."
+        },
+        "HomePage": {
+            "path": "/",
+            "description": "Dashboard for users to view their 'Pending' and 'Validated' review batches. Batch details are shown using ReviewCards.",
+            "key_actions": [
+                "Switch between Pending/Validated tabs",
+                "Navigate to detailed review table via 'Validate' button"
+            ]
+        },
+        "NewTable": {
+            "path": "/table",
+            "description": "The primary interaction hub where users review detailed silo matching data.",
+            "key_features": [
+                "Global Validation: Toggle all 'Matched' records at once using the header checkbox.",
+                "Individual Validation: Checkbox for row-level validation (enabled only for Matched status).",
+                "Status Management: Update row status (Matched, To Review, Not Matched, Invalid) via dropdown.",
+                "LDC ID Editing: Click-to-edit LDC IDs directly in the table cells.",
+                "Infinite Scrolling: Performance-optimized long list rendering.",
+                "Visual Cues: Color-coded rows based on status (e.g., green for Matched, yellow for To Review) and greyed-out read-only/Invalid rows."
+            ]
+        }
+    },
+    "key_components": {
+        "Header": "Universal navigation component with page titles and subtitles.",
+        "ReviewCard": "Component to display summary information for a batch of records on the Home page.",
+        "StatusSelect": "Specialized dropdown for updating record statuses in the table.",
+        "LdcIdCell": "Interactive cell for managing LDC ID strings with edit/save state."
+    }
+}

@@ -290,6 +290,37 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         await handleUpdate(rowId, { validated: newValidated }, rowData.batch_id as string);
     };
 
+    const handleGlobalToggleValidated = async () => {
+        const eligibleRows = table.getFilteredRowModel().rows.filter((row) => {
+            const record = row.original as AnyRecord;
+            return normalizeStatus(record.status) === 'Matched' && !isRowReadOnly(record);
+        });
+
+        if (eligibleRows.length === 0) return;
+
+        const allValidated = eligibleRows.every((row) => !!row.original.validated);
+        const newState = !allValidated;
+
+        // Optimistic update
+        const affectedIds = new Set(eligibleRows.map((row) => String(row.id)));
+        setTableData((prev) =>
+            prev.map((r) =>
+                affectedIds.has(String(r['id'])) ? { ...r, validated: newState } : r
+            )
+        );
+
+        // Trigger API updates
+        await Promise.all(
+            eligibleRows.map((row) =>
+                handleUpdate(
+                    String(row.id),
+                    { validated: newState },
+                    row.original.batch_id as string
+                )
+            )
+        );
+    };
+
 
     // Add this below handleToggleValidated
     const handleStatusChange = async (
@@ -347,11 +378,41 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         const baseColumns: ColumnDef<AnyRecord>[] = [
             {
                 id: 'validated',
-                header: () => (
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-                        Val
-                    </span>
-                ),
+                header: ({ table }) => {
+                    const filteredRows = table.getFilteredRowModel().rows;
+                    const eligibleRows = filteredRows.filter((row) => {
+                        const record = row.original as AnyRecord;
+                        return normalizeStatus(record.status) === 'Matched' && !isRowReadOnly(record);
+                    });
+
+                    const allValidated =
+                        eligibleRows.length > 0 && eligibleRows.every((row) => !!row.original.validated);
+                    const someValidated = eligibleRows.some((row) => !!row.original.validated);
+                    const isIndeterminate = someValidated && !allValidated;
+
+                    return (
+                        <div className="flex flex-col items-center gap-1 py-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                                Val
+                            </span>
+                            <input
+                                type="checkbox"
+                                checked={allValidated}
+                                ref={(el) => {
+                                    if (el) el.indeterminate = isIndeterminate;
+                                }}
+                                onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleGlobalToggleValidated();
+                                }}
+                                disabled={eligibleRows.length === 0}
+                                className={`rounded border-white/30 w-4 h-4 transition-all accent-white cursor-pointer hover:scale-110 ${eligibleRows.length === 0 ? 'opacity-30 cursor-not-allowed' : ''
+                                    }`}
+                                title="Validate all Matched records"
+                            />
+                        </div>
+                    );
+                },
                 cell: ({ row }) => {
                     const isReadOnly = isRowReadOnly(row.original as AnyRecord);
                     const status = normalizeStatus(row.original.status);
