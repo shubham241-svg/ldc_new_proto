@@ -6,7 +6,7 @@ import { Header } from '@/components/Header';
 import { ReviewCard } from '@/components/ReviewCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { reviewItems } from '@/data/sampleData';
-import { ClipboardList, User, Mail, Key, CheckCircle } from 'lucide-react';
+import { ClipboardList, User, Mail, CheckCircle } from 'lucide-react';
 
 type TabType = 'pending' | 'validated';
 
@@ -15,32 +15,6 @@ export function HomePage() {
     const account = useAccount(accounts[0] || {});
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<TabType>('pending');
-    const [tokenInfo, setTokenInfo] = useState<{
-        valid: boolean;
-        expiresOn?: string;
-    } | null>(null);
-
-    useEffect(() => {
-        const validateToken = async () => {
-            try {
-                if (account) {
-                    const response = await instance.acquireTokenSilent({
-                        ...tokenRequest,
-                        account,
-                    });
-                    setTokenInfo({
-                        valid: true,
-                        expiresOn: response.expiresOn?.toLocaleString(),
-                    });
-                }
-            } catch (error) {
-                console.error('Token validation failed:', error);
-                setTokenInfo({ valid: false });
-            }
-        };
-
-        validateToken();
-    }, [account, instance]);
 
     const pendingItems = reviewItems.filter((r) => r.status === 'pending');
     const validatedItems = reviewItems.filter((r) => r.status === 'validated');
@@ -66,21 +40,12 @@ export function HomePage() {
                                     <div>
                                         <p className="font-semibold text-foreground flex items-center gap-2">
                                             {account.name || 'User'}
-                                            {tokenInfo?.valid && (
-                                                <CheckCircle className="w-4 h-4 text-primary" />
-                                            )}
                                         </p>
                                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                             <span className="flex items-center gap-1">
                                                 <Mail className="w-3.5 h-3.5" />
                                                 {account.username || 'N/A'}
                                             </span>
-                                            {tokenInfo?.expiresOn && (
-                                                <span className="flex items-center gap-1 text-xs">
-                                                    <Key className="w-3 h-3" />
-                                                    Token expires: {tokenInfo.expiresOn}
-                                                </span>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -107,8 +72,8 @@ export function HomePage() {
                             <button
                                 onClick={() => setActiveTab('pending')}
                                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${activeTab === 'pending'
-                                        ? 'bg-primary text-primary-foreground shadow-md'
-                                        : 'text-muted-foreground hover:text-foreground'
+                                    ? 'bg-primary text-primary-foreground shadow-md'
+                                    : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
                                 Pending
@@ -116,8 +81,8 @@ export function HomePage() {
                             <button
                                 onClick={() => setActiveTab('validated')}
                                 className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${activeTab === 'validated'
-                                        ? 'bg-primary text-primary-foreground shadow-md'
-                                        : 'text-muted-foreground hover:text-foreground'
+                                    ? 'bg-primary text-primary-foreground shadow-md'
+                                    : 'text-muted-foreground hover:text-foreground'
                                     }`}
                             >
                                 Validated

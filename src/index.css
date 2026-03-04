@@ -53,7 +53,7 @@
   /* Status colors */
   --status-matched: oklch(0.78 0.12 145);
   --status-review: oklch(0.85 0.12 85);
-  --status-not-matched: oklch(0.82 0.1 25);
+  --status-not-matched: oklch(0.55 0.22 25);
 }
 
 .dark {
@@ -147,6 +147,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;

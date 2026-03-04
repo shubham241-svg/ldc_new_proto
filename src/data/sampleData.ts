@@ -72,7 +72,7 @@ export const sampleapiresponse =
       "match_context": "BOL+Mass (veh 100.0%; Received Mass within 0.18%; Date within 0 days; Location 21.1% similar)",
       "status": "MATCHED",
       "is_validated": true,
-      "generation_id": null,
+      "generation_id": true,
       "created_at": "2026-03-03T15:18:23.912023"
     },
     {
@@ -120,7 +120,7 @@ export const sampleapiresponse =
       "match_context": "BOL+Mass (veh 100.0%; Received Mass within 0.08%; Date within 0 days; Location 21.1% similar)",
       "status": "MATCHED",
       "is_validated": true,
-      "generation_id": null,
+      "generation_id": true,
       "created_at": "2026-03-03T15:18:23.912023"
     },
     {

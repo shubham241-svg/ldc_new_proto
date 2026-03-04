@@ -23,6 +23,7 @@ import {
     Filter,
     Download,
     Search,
+    Loader2,
 } from 'lucide-react';
 import { getAccessToken } from '@/auth/getAccessToken';
 type AnyRecord = Record<string, unknown>;
@@ -44,13 +45,14 @@ const formatValue = (v: unknown): string => {
     return String(v);
 };
 
-type NormalizedStatus = 'Matched' | 'Not Matched' | 'To Review' | 'Not Validate';
+type NormalizedStatus = 'Matched' | 'Not Matched' | 'To Review' | 'Invalid';
 
 const normalizeStatus = (raw: unknown): NormalizedStatus | null => {
     if (raw == null) return null;
     const s = String(raw).trim().toUpperCase();
     if (s === 'MATCHED') return 'Matched';
-    if (s === 'NO MATCH' || s === 'NOT MATCHED') return 'Not Matched';    if (s === 'NOT VALIDATE' || s === 'NOT VALIDATED') return 'Not Validate';
+    if (s === 'NO MATCH' || s === 'NOT MATCHED') return 'Not Matched';
+    if (s === 'INVALID') return 'Invalid';
     if (['TO REVIEW', 'REVIEW', 'PENDING'].includes(s)) return 'To Review';
     return null;
 };
@@ -62,24 +64,34 @@ function StatusBadge({ value }: { value: unknown }) {
         Matched: 'matched' as const,
         'To Review': 'review' as const,
         'Not Matched': 'notMatched' as const,
+        'Invalid': 'notMatched' as const, // Added map for invalid
     };
     return <Badge variant={variantMap[norm]}>{norm}</Badge>;
 }
 
+const isRowReadOnly = (row: AnyRecord) => {
+    const norm = normalizeStatus(row?.status);
+    return row.generation_id != null || norm === 'Invalid';
+};
+
 const getRowBg = (row: AnyRecord) => {
-  const norm = normalizeStatus(row?.status);
-  switch (norm) {
-    case 'Matched':
-      return 'bg-status-matched/10 hover:bg-status-matched/20';
-    case 'To Review':
-      return 'bg-status-review/10 hover:bg-status-review/20';
-    case 'Not Matched':
-      return 'bg-status-not-matched/10 hover:bg-status-not-matched/20';
-    case 'Not Validate':
-      return 'bg-gray-100 hover:bg-gray-200';
-    default:
-      return '';
-  }
+    const norm = normalizeStatus(row?.status);
+
+    // Greyed out if generation_id is not null OR status is INVALID
+    if (row.generation_id != null || norm === 'Invalid') {
+        return 'bg-muted/50 text-muted-foreground opacity-75 grayscale-[0.3]';
+    }
+
+    switch (norm) {
+        case 'Matched':
+            return 'bg-status-matched/10 hover:bg-status-matched/20';
+        case 'To Review':
+            return 'bg-status-review/10 hover:bg-status-review/20';
+        case 'Not Matched':
+            return 'bg-status-not-matched/10 hover:bg-status-not-matched/20';
+        default:
+            return '';
+    }
 };
 
 
@@ -121,9 +133,11 @@ function useInfiniteScroll({
 function StatusSelect({
     value,
     onChange,
+    disabled
 }: {
     value: unknown;
     onChange: (next: NormalizedStatus) => void;
+    disabled?: boolean;
 }) {
     const current = normalizeStatus(value) ?? 'To Review';
 
@@ -131,22 +145,24 @@ function StatusSelect({
         'Matched',
         'Not Matched',
         'To Review',
-        'Not Validate',
+        'Invalid',
     ];
 
-    // Tailwind color classes for each status
+    // Tailwind color classes for each status (reverted to original)
     const colorMap: Record<NormalizedStatus, string> = {
         'Matched': 'bg-green-100 text-green-900 border-green-300',
         'Not Matched': 'bg-red-100 text-red-900 border-red-300',
         'To Review': 'bg-yellow-100 text-yellow-900 border-yellow-300',
-        'Not Validate': 'bg-gray-100 text-gray-900 border-gray-300',
+        'Invalid': 'bg-gray-100 text-gray-900 border-gray-300',
     };
 
     return (
         <select
             value={current}
             onChange={(e) => onChange(e.target.value as NormalizedStatus)}
-            className={`px-2 py-1 rounded text-sm border focus:outline-none focus:ring-1 transition-colors ${colorMap[current]}`}
+            disabled={disabled}
+            className={`px-2 py-1 rounded text-sm border focus:outline-none focus:ring-1 transition-colors ${disabled ? 'bg-gray-50 text-gray-500 border-gray-200 cursor-not-allowed opacity-50' : colorMap[current]
+                }`}
         >
             {options.map((o) => (
                 <option key={o} value={o}>
@@ -160,11 +176,13 @@ function StatusSelect({
 function LdcIdCell({
     value,
     rowId,
-    onSave
+    onSave,
+    disabled
 }: {
     value: unknown;
     rowId: string;
-    onSave: (val: string) => void
+    onSave: (val: string) => void;
+    disabled?: boolean;
 }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editingValue, setEditingValue] = useState(String(value ?? ''));
@@ -203,10 +221,12 @@ function LdcIdCell({
     return (
         <div
             onClick={() => {
+                if (disabled) return;
                 setEditingValue(String(value ?? ''));
                 setIsEditing(true);
             }}
-            className="cursor-pointer hover:bg-black/5 px-2 py-1 rounded transition-colors min-h-[2rem] flex items-center"
+            className={`px-2 py-1 rounded transition-colors min-h-[2rem] flex items-center ${disabled ? 'cursor-default' : 'cursor-pointer hover:bg-black/5'
+                }`}
         >
             {String(value ?? '')}
         </div>
@@ -231,6 +251,12 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [globalFilter, setGlobalFilter] = useState('');
     const [rowSelection, setRowSelection] = useState({});
+    const [updatingRows, setUpdatingRows] = useState<Set<string>>(new Set());
+    const [confirmingInvalid, setConfirmingInvalid] = useState<{
+        rowId: string;
+        rowData: AnyRecord;
+        nextStatus: NormalizedStatus;
+    } | null>(null);
 
     // Infinite scroll (client-slice)
     const INITIAL = 20;
@@ -271,6 +297,11 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         nextStatus: NormalizedStatus,
         rowData: AnyRecord
     ) => {
+        if (nextStatus === 'Invalid') {
+            setConfirmingInvalid({ rowId, rowData, nextStatus });
+            return;
+        }
+
         // Optimistic update
         setTableData((prev) =>
             prev.map((r) =>
@@ -280,6 +311,22 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
 
         // Persist to backend (if API expects other casing/keys, map here)
         await handleUpdate(rowId, { status: nextStatus } as any, rowData.batch_id as string);
+    };
+
+    const confirmStatusChange = async () => {
+        if (!confirmingInvalid) return;
+        const { rowId, rowData, nextStatus } = confirmingInvalid;
+
+        // Optimistic update
+        setTableData((prev) =>
+            prev.map((r) =>
+                String(r['id']) === String(rowId) ? { ...r, status: nextStatus } : r
+            )
+        );
+
+        const batchId = rowData.batch_id as string;
+        setConfirmingInvalid(null);
+        await handleUpdate(rowId, { status: nextStatus } as any, batchId);
     };
 
     // Build dynamic columns
@@ -299,36 +346,36 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
     const columns: ColumnDef<AnyRecord>[] = useMemo(() => {
         const baseColumns: ColumnDef<AnyRecord>[] = [
             {
-  id: 'validated',
-  header: () => (
-    <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-      Val
-    </span>
-  ),
-  cell: ({ row }) => {
-    const status = normalizeStatus(row.original.status);
-    const disabled = status !== 'Matched';
+                id: 'validated',
+                header: () => (
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
+                        Val
+                    </span>
+                ),
+                cell: ({ row }) => {
+                    const isReadOnly = isRowReadOnly(row.original as AnyRecord);
+                    const status = normalizeStatus(row.original.status);
+                    const disabled = isReadOnly || status !== 'Matched';
 
-    return (
-      <input
-        type="checkbox"
-        checked={!!row.original.validated}
-        disabled={disabled}
-        onChange={() => {
-          if (!disabled) {
-            handleToggleValidated(row.id as string, row.original as AnyRecord);
-          }
-        }}
-        className={`rounded border-gray-300 w-4 h-4 ${
-          disabled ? 'opacity-40 cursor-not-allowed' : 'accent-primary cursor-pointer'
-        }`}
-        title={disabled ? 'Validation allowed only for Matched' : 'Mark as validated'}
-      />
-    );
-  },
-  size: 50,
-  enableSorting: false,
-}
+                    return (
+                        <input
+                            type="checkbox"
+                            checked={!!row.original.validated}
+                            disabled={disabled}
+                            onChange={() => {
+                                if (!disabled) {
+                                    handleToggleValidated(row.id as string, row.original as AnyRecord);
+                                }
+                            }}
+                            className={`rounded border-slate-300 w-4 h-4 transition-all ${disabled ? 'opacity-30 cursor-not-allowed border-slate-200' : 'accent-primary cursor-pointer hover:scale-110'
+                                }`}
+                            title={isReadOnly ? 'Record is read-only' : disabled ? 'Validation allowed only for Matched' : 'Mark as validated'}
+                        />
+                    );
+                },
+                size: 50,
+                enableSorting: false,
+            }
         ];
 
         const dynCols: ColumnDef<AnyRecord>[] = dynamicKeys.map((key) => ({
@@ -339,11 +386,13 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
             size: 160,
             cell: ({ getValue, row }) => {
                 const val = getValue();
+                const isReadOnly = isRowReadOnly(row.original as AnyRecord);
 
                 if (key.toLowerCase() === 'status') {
                     return (
                         <StatusSelect
                             value={val}
+                            disabled={isReadOnly}
                             onChange={(next) => handleStatusChange(row.id, next, row.original as AnyRecord)}
                         />
                     );
@@ -354,6 +403,7 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
                         <LdcIdCell
                             value={val}
                             rowId={row.id}
+                            disabled={isReadOnly}
                             onSave={(newVal) => handleLdcIdUpdate(row.id, newVal, row.original as AnyRecord)}
                         />
                     );
@@ -380,13 +430,29 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
     });
 
     const filteredRows = table.getFilteredRowModel().rows;
-    const hasMore = visibleCount < filteredRows.length;
-    const onLoadMore = () => setVisibleCount((c) => Math.min(c + STEP, filteredRows.length));
+
+    // Sort filteredRows so that greyed-out rows are at the end
+    const sortedFilteredRows = useMemo(() => {
+        return [...filteredRows].sort((a, b) => {
+            const aRecord = a.original as AnyRecord;
+            const bRecord = b.original as AnyRecord;
+
+            const aIsGrey = isRowReadOnly(aRecord);
+            const bIsGrey = isRowReadOnly(bRecord);
+
+            if (aIsGrey && !bIsGrey) return 1;
+            if (!aIsGrey && bIsGrey) return -1;
+            return 0;
+        });
+    }, [filteredRows]);
+
+    const hasMore = visibleCount < sortedFilteredRows.length;
+    const onLoadMore = () => setVisibleCount((c) => Math.min(c + STEP, sortedFilteredRows.length));
 
     const scrollRootRef = useRef<HTMLDivElement>(null);
     const { sentinelRef } = useInfiniteScroll({ hasMore, onLoadMore, rootRef: scrollRootRef as React.RefObject<HTMLDivElement> });
 
-    const rowsToRender = filteredRows.slice(0, visibleCount);
+    const rowsToRender = sortedFilteredRows.slice(0, visibleCount);
 
     // patch call to update table data on edit
 
@@ -395,6 +461,7 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
         updates: { ldc_id?: string; validated?: boolean; status?: NormalizedStatus | string },
         batchId: string
     ) => {
+        setUpdatingRows((prev) => new Set(prev).add(String(matchId)));
         try {
             const response = await fetch(
                 `http://127.0.0.1:8020/api/dxo/pa/ldc/v1/customer-ldc-match/${matchId}`,
@@ -425,6 +492,12 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
             );
         } catch (error) {
             console.error('Update failed:', error);
+        } finally {
+            setUpdatingRows((prev) => {
+                const next = new Set(prev);
+                next.delete(String(matchId));
+                return next;
+            });
         }
     };
 
@@ -515,20 +588,28 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
                             </thead>
 
                             <tbody>
-                                {rowsToRender.map((row) => (
-                                    <tr
-                                        key={row.id}
-                                        className={`border-b border-border/50 transition-colors duration-150 ${getRowBg(
-                                            row.original as AnyRecord
-                                        )}`}
-                                    >
-                                        {row.getVisibleCells().map((cell) => (
-                                            <td key={cell.id} className="px-3 py-3 whitespace-nowrap text-foreground">
-                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))}
+                                {rowsToRender.map((row) => {
+                                    const isUpdating = updatingRows.has(String(row.id));
+                                    return (
+                                        <tr
+                                            key={row.id}
+                                            className={`group border-b border-border/50 transition-colors duration-150 relative ${getRowBg(
+                                                row.original as AnyRecord
+                                            )}`}
+                                        >
+                                            {isUpdating && (
+                                                <td className="absolute inset-0 bg-background/40 backdrop-blur-[1px] flex items-center justify-center z-10 pointer-events-none">
+                                                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                </td>
+                                            )}
+                                            {row.getVisibleCells().map((cell) => (
+                                                <td key={cell.id} className="px-3 py-3 whitespace-nowrap text-foreground">
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
 
@@ -561,6 +642,57 @@ export function DynamicTablePage({ records }: { records: AnyRecord[] }) {
                     </div>
                 </div>
             </main>
+
+            {/* Confirmation Modal */}
+            {confirmingInvalid && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+                        {/* Professional Header */}
+                        <div className="bg-primary px-6 py-4 flex items-center border-b border-primary-foreground/10">
+                            <h3 className="text-lg font-bold text-white uppercase tracking-wider">
+                                Confirm Status Change
+                            </h3>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="space-y-4">
+                                <p className="text-slate-600 leading-relaxed text-base">
+                                    Are you sure you want to change this row with LDC ID:
+                                    <span className="inline-block mx-1.5 font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 shadow-sm">
+                                        {String(confirmingInvalid.rowData.ldc_id ?? 'N/A')}
+                                    </span>
+                                    to <span className="font-extrabold text-slate-900 underline decoration-2 decoration-slate-200 underline-offset-4">Invalid</span>?
+                                </p>
+
+                                <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex gap-3">
+                                    <span className="text-xl grayscale">⚠️</span>
+                                    <p className="text-sm font-semibold text-slate-700">
+                                        This action will mark the record as invalid across the system and cannot be reversed.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Standardized Industry Action Buttons (Uniform Gray Outline) */}
+                            <div className="flex items-center gap-4 mt-8">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setConfirmingInvalid(null)}
+                                    className="flex-1 h-11 border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold text-sm transition-all active:scale-95"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={confirmStatusChange}
+                                    className="flex-1 h-11 border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm transition-all active:scale-95"
+                                >
+                                    Confirm Change
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
